@@ -74,14 +74,14 @@ class AutoAttackMod(loader.Module):
             await asyncio.sleep(self.delay)
 
     @loader.command()
-    async def autoattackon(self, message):
-        """.autoattackon [секунды] — включить автоатаку"""
+    async def aaon(self, message):
+        """.aaon [секунды] — включить автоатаку"""
         args = utils.get_args_raw(message)
         if args:
             try:
                 self.delay = float(args.strip())
             except ValueError:
-                await utils.answer(message, "❌ Укажи задержку числом: .autoattackon 3.5")
+                await utils.answer(message, "❌ Укажи задержку числом: .aaon 3.5")
                 return
 
         if self.running:
@@ -100,15 +100,15 @@ class AutoAttackMod(loader.Module):
         asyncio.ensure_future(self._attack_loop())
 
     @loader.command()
-    async def autoattackoff(self, message):
-        """.autoattackoff — остановить автоатаку"""
+    async def aaoff(self, message):
+        """.aaoff — остановить автоатаку"""
         self.running = False
         self.low_hp = False
         await utils.answer(message, "🛑 Автоатака остановлена.")
 
     @loader.command()
-    async def autoattackstatus(self, message):
-        """.autoattackstatus — текущий статус"""
+    async def aas(self, message):
+        """.aas — текущий статус"""
         mode = "✅ Работает" if self.running else "🛑 Остановлена"
         hp = "⚠️ Низкий HP — жмёт 🔃 Обновить" if self.low_hp else "💪 Норма — жмёт ⚔️ Атаковать"
         await utils.answer(
