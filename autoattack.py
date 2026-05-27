@@ -17,11 +17,13 @@ class AutoAttackMod(loader.Module):
         self.running = False
         self.delay = 5.0
         self.low_hp = False
+        self._cached_msg_id = None
 
     async def client_ready(self, client, db):
         self.client = client
 
-    async def _get_battle_msg(self):
+    async def _find_battle_msg(self):
+        """Ищет боевое сообщение среди последних 10."""
         msgs = await self.client.get_messages(BOT_ID, limit=10)
         for msg in msgs:
             if not msg.buttons:
@@ -32,6 +34,22 @@ class AutoAttackMod(loader.Module):
                         return msg
         return None
 
+    async def _get_msg(self):
+        """Возвращает закешированное сообщение (обновляет его из истории)."""
+        if self._cached_msg_id:
+            msgs = await self.client.get_messages(BOT_ID, ids=[self._cached_msg_id])
+            msg = msgs[0] if msgs else None
+            if msg and msg.buttons:
+                for row in msg.buttons:
+                    for btn in row:
+                        if btn.text in ("⚔️ Атаковать", "🔃 Обновить"):
+                            return msg
+        # Кеш устарел — ищем заново
+        msg = await self._find_battle_msg()
+        if msg:
+            self._cached_msg_id = msg.id
+        return msg
+
     async def _click(self, msg, text):
         for row in msg.buttons or []:
             for btn in row:
@@ -41,7 +59,6 @@ class AutoAttackMod(loader.Module):
         return False
 
     def _parse_hp_bars(self, text):
-        """Возвращает количество полных █ в строке HP игрока."""
         if not text:
             return None
         match = re.search(r"💚[^\[]*\[([█░]+)\]", text)
@@ -52,7 +69,7 @@ class AutoAttackMod(loader.Module):
     async def _attack_loop(self):
         while self.running:
             try:
-                msg = await self._get_battle_msg()
+                msg = await self._get_msg()
 
                 if not msg:
                     await asyncio.sleep(self.delay)
@@ -75,7 +92,7 @@ class AutoAttackMod(loader.Module):
 
     @loader.command()
     async def aaon(self, message):
-        """.aaon [секунды] — включить автоатаку"""
+        """[секунды] — включить автоатаку"""
         args = utils.get_args_raw(message)
         if args:
             try:
@@ -89,32 +106,27 @@ class AutoAttackMod(loader.Module):
             return
 
         self.running = True
-        await utils.answer(
-            message,
-            f"⚔️ <b>Автоатака запущена</b>\n"
-            f"🤖 Бот: <code>{BOT_ID}</code>\n"
-            f"⏱ Задержка: <code>{self.delay}с</code>\n"
-            f"💔 При HP ≤ 1 полоски → 🔃 Обновить\n"
-            f"💚 Когда HP > 1 полоски → ⚔️ Атаковать",
-        )
+        self._cached_msg_id = None
+        await utils.answer(message, f"⚔️ DM атака запущена | задержка {self.delay}с")
         asyncio.ensure_future(self._attack_loop())
 
     @loader.command()
     async def aaoff(self, message):
-        """.aaoff — остановить автоатаку"""
+        """Остановить автоатаку"""
         self.running = False
         self.low_hp = False
+        self._cached_msg_id = None
         await utils.answer(message, "🛑 Автоатака остановлена.")
 
     @loader.command()
     async def aas(self, message):
-        """.aas — текущий статус"""
+        """Текущий статус"""
         mode = "✅ Работает" if self.running else "🛑 Остановлена"
         hp = "⚠️ Низкий HP — жмёт 🔃 Обновить" if self.low_hp else "💪 Норма — жмёт ⚔️ Атаковать"
         await utils.answer(
             message,
-            f"<b>AutoAttack статус:</b>\n"
-            f"• Режим: {mode}\n"
-            f"• HP: {hp}\n"
+            f"<b>AutoAttack:</b>\n"
+            f"• {mode}\n"
+            f"• {hp}\n"
             f"• Задержка: <code>{self.delay}с</code>",
         )
